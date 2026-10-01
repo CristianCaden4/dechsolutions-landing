@@ -1,7 +1,13 @@
+'use client';
+
+import { useRef } from 'react';
+import { useScrollProgress, ease } from './scroll/engine';
+
 const SOLUTIONS = [
   {
     title: 'Software a la medida',
     desc: 'Creamos sistemas ajustados a la forma real en que trabaja tu empresa.',
+    size: 'wide',
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64CEFB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="16 18 22 12 16 6"></polyline>
@@ -55,6 +61,7 @@ const SOLUTIONS = [
   {
     title: 'Transformación tecnológica',
     desc: 'Convertimos procesos dispersos en una operación más ordenada y preparada para crecer.',
+    size: 'banner',
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64CEFB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
@@ -64,13 +71,99 @@ const SOLUTIONS = [
   },
 ];
 
-export default function SolutionsSection() {
+const HEADING = 'Construimos la tecnología que tu operación necesita.';
+
+function SolutionCard({ s, i }) {
+  const ref = useRef(null);
+
+  useScrollProgress(
+    ref,
+    (p) => {
+      const k = ease.outCubic(ease.range(p, 0.05 + (i % 3) * 0.06, 0.7 + (i % 3) * 0.06));
+      ref.current.style.setProperty('--in', k.toFixed(4));
+    },
+    { mode: 'enter' }
+  );
+
+  const onMove = (e) => {
+    const el = ref.current;
+    const r = el.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    const y = (e.clientY - r.top) / r.height;
+    el.style.setProperty('--sx', `${(x * 100).toFixed(1)}%`);
+    el.style.setProperty('--sy', `${(y * 100).toFixed(1)}%`);
+    el.style.setProperty('--rx', `${((0.5 - y) * 6).toFixed(2)}deg`);
+    el.style.setProperty('--ry', `${((x - 0.5) * 6).toFixed(2)}deg`);
+  };
+  const onLeave = () => {
+    ref.current.style.setProperty('--rx', '0deg');
+    ref.current.style.setProperty('--ry', '0deg');
+  };
+
   return (
-    <section id="soluciones" data-nav-theme="light" style={{ background: '#fff', padding: '100px 0' }}>
+    <div ref={ref} className={`solution-card ${s.size ? `solution-card--${s.size}` : ''}`} onPointerMove={onMove} onPointerLeave={onLeave}>
+      <div className="solution-card__inner">
+        <span className="solution-card__icon">{s.icon}</span>
+        <h3>{s.title}</h3>
+        <p>{s.desc}</p>
+        {s.size === 'wide' && (
+          <div className="code-ghost mono" aria-hidden="true">
+            <span>
+              <i>const</i> sistema = construir(<b>tuOperación</b>);
+            </span>
+            <span>
+              sistema.<i>adaptar</i>(procesosReales);
+            </span>
+            <span>
+              sistema.<i>conectar</i>(ventas, inventario, clientes);
+            </span>
+          </div>
+        )}
+        {s.size === 'banner' && (
+          <div className="transform-line" aria-hidden="true">
+            {Array.from({ length: 14 }).map((_, k) => (
+              <span key={k} style={{ '--y': `${Math.round(Math.sin(k * 2.3) * 24 * Math.max(0, 1 - k / 7))}px` }} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function SolutionsSection() {
+  const headRef = useRef(null);
+  const words = HEADING.split(' ');
+
+  useScrollProgress(
+    headRef,
+    (p) => {
+      const lit = ease.range(p, 0.08, 0.62) * words.length;
+      headRef.current.querySelectorAll('.lit-word').forEach((el, i) => {
+        el.style.opacity = (0.16 + 0.84 * ease.clamp(lit - i)).toFixed(3);
+      });
+    },
+    { mode: 'enter', reducedValue: 1 }
+  );
+
+  return (
+    <section id="soluciones" data-nav-theme="light" className="solutions" aria-labelledby="solutions-title">
       <div className="wrap">
-        <p className="eyebrow">SOLUCIONES DETALLADAS</p>
-        <h2 className="section-heading light" style={{ maxWidth: 820 }}>
-          Construimos la tecnología que tu operación necesita.
+        <div className="badge-row">
+          <span className="badge-num">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+          </span>
+          <span className="badge-pill">Soluciones detalladas</span>
+        </div>
+        <h2 ref={headRef} id="solutions-title" className="section-heading light solutions-heading" aria-label={HEADING}>
+          {words.map((wd, i) => (
+            <span key={i} className="lit-word" aria-hidden="true">
+              {wd}{' '}
+            </span>
+          ))}
         </h2>
         <p className="section-sub light">
           Te ayudamos a ordenar la operación, ahorrar tiempo y tomar decisiones con información confiable.
@@ -78,16 +171,7 @@ export default function SolutionsSection() {
 
         <div className="solutions-grid">
           {SOLUTIONS.map((s, i) => (
-            <div
-              key={s.title}
-              className="solution-card"
-              data-reveal
-              style={{ transitionDelay: `${i * 0.08}s` }}
-            >
-              {s.icon}
-              <h3>{s.title}</h3>
-              <p>{s.desc}</p>
-            </div>
+            <SolutionCard key={s.title} s={s} i={i} />
           ))}
         </div>
       </div>

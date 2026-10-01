@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useScrollProgress, prefersReducedMotion, ease } from './scroll/engine';
 
 const INDUSTRIES = [
   {
@@ -59,83 +60,145 @@ const INDUSTRIES = [
 ];
 
 export default function IndustriesSection() {
-  const carouselRef = useRef(null);
+  const sectionRef = useRef(null);
+  const viewportRef = useRef(null);
+  const trackRef = useRef(null);
+  const barRef = useRef(null);
+  const dist = useRef(0);
   const [active, setActive] = useState(0);
+  const activeRef = useRef(0);
 
+  // Scroll room is the horizontal travel times DWELL, so the pan reads as a deliberate journey.
+const DWELL = 1.5;
+
+// The section is as tall as the horizontal distance the track must travel.
   useEffect(() => {
-    const el = carouselRef.current;
-    if (!el) return;
-    let ticking = false;
-    const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        if (el.firstElementChild) {
-          const cardW = el.firstElementChild.getBoundingClientRect().width + 20;
-          setActive(Math.round(el.scrollLeft / cardW));
-        }
-        ticking = false;
-      });
+    const size = () => {
+      if (prefersReducedMotion()) {
+        sectionRef.current.style.height = '';
+        return;
+      }
+      const track = trackRef.current;
+      const vp = viewportRef.current;
+      dist.current = Math.max(0, track.scrollWidth - vp.clientWidth);
+      sectionRef.current.style.height = `${window.innerHeight + dist.current * DWELL}px`;
     };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
+    size();
+    const ro = new ResizeObserver(size);
+    ro.observe(trackRef.current);
+    window.addEventListener('resize', size);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', size);
+    };
   }, []);
 
+  useScrollProgress(
+    sectionRef,
+    (p) => {
+      if (prefersReducedMotion()) return;
+      const x = -p * dist.current;
+      trackRef.current.style.transform = `translate3d(${x}px, 0, 0)`;
+      barRef.current.style.transform = `scaleX(${0.08 + 0.92 * p})`;
+      // depth: the card nearest a focal point that sweeps left to right comes forward,
+      // so the first and the last card each get their moment
+      const vw = viewportRef.current.clientWidth;
+      const focal = vw * (0.24 + 0.52 * p);
+      const cards = trackRef.current.children;
+      let best = 0;
+      let bestD = Infinity;
+      for (let i = 0; i < cards.length; i++) {
+        const r = cards[i].getBoundingClientRect();
+        const c = r.left + r.width / 2 - focal;
+        const d = Math.abs(c) / vw;
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+        const k = ease.clamp(1 - d * 1.8);
+        cards[i].style.setProperty('--focus', k.toFixed(3));
+      }
+      if (best !== activeRef.current) {
+        activeRef.current = best;
+        setActive(best);
+      }
+    },
+    { mode: 'pin', ease: 0.1 }
+  );
+
+  // buttons and dots scroll the page to the matching point of the pan
   const goTo = (i) => {
     const clamped = Math.max(0, Math.min(INDUSTRIES.length - 1, i));
-    const el = carouselRef.current;
-    if (el && el.children[clamped]) {
-      el.children[clamped].scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+    if (prefersReducedMotion()) {
+      viewportRef.current.scrollTo({ left: trackRef.current.children[clamped].offsetLeft, behavior: 'auto' });
+      setActive(clamped);
+      return;
     }
-    setActive(clamped);
+    const top = sectionRef.current.getBoundingClientRect().top + window.scrollY;
+    const p = clamped / (INDUSTRIES.length - 1);
+    window.scrollTo({ top: top + p * dist.current * DWELL, behavior: 'smooth' });
   };
 
   return (
-    <section data-nav-theme="light" style={{ background: '#fff', padding: '100px 0' }}>
-      <div className="wrap">
-        <p className="eyebrow">INDUSTRIAS</p>
-        <h2 className="section-heading light" style={{ marginBottom: 56 }}>
-          Tecnología para operaciones reales.
-        </h2>
-
-        <div className="industries-row">
-          <button className="industry-arrow-btn" aria-label="Anterior" onClick={() => goTo(active - 1)}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6"></polyline>
-            </svg>
-          </button>
-
-          <div className="industry-carousel" ref={carouselRef}>
-            {INDUSTRIES.map((ind) => (
-              <div key={ind.name} className="industry-card">
-                <div className="industry-card-icon">{ind.icon}</div>
-                <h3>{ind.name}</h3>
-                <div className="industry-pills">
-                  {ind.pills.map((p) => (
-                    <span key={p} className="industry-pill">{p}</span>
-                  ))}
-                </div>
-              </div>
-            ))}
+    <section ref={sectionRef} data-nav-theme="light" className="industries" aria-labelledby="industries-title">
+      <div className="industries-sticky">
+        <div className="wrap industries-head">
+          <div>
+            <p className="tag-mono light">
+              <span className="tag-mono__slash">//</span> Industrias
+            </p>
+            <h2 id="industries-title" className="section-heading light">
+              Tecnología para operaciones reales.
+            </h2>
           </div>
-
-          <button className="industry-arrow-btn" aria-label="Siguiente" onClick={() => goTo(active + 1)}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </button>
+          <div className="industries-controls">
+            <button className="industry-arrow-btn" aria-label="Anterior" onClick={() => goTo(active - 1)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+            <button className="industry-arrow-btn" aria-label="Siguiente" onClick={() => goTo(active + 1)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 24 }}>
-          {INDUSTRIES.map((ind, i) => (
-            <button
-              key={ind.name}
-              aria-label={`Ir a ${ind.name}`}
-              onClick={() => goTo(i)}
-              className="industry-dot"
-              style={{ width: active === i ? 22 : 8, opacity: active === i ? 1 : 0.35 }}
-            />
-          ))}
+        <div ref={viewportRef} className="industries-viewport">
+          <div ref={trackRef} className="industries-track">
+            {INDUSTRIES.map((ind) => (
+              <article key={ind.name} className="industry-card">
+                <div className="industry-card-icon" aria-hidden="true">
+                  {ind.icon}
+                </div>
+                <h3>{ind.name}</h3>
+                <div className="industry-flow">
+                  {ind.pills.map((p, k) => (
+                    <span key={p} className="industry-pill" style={{ '--k': k }}>
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="wrap industries-foot">
+          <div className="industries-bar">
+            <span ref={barRef} />
+          </div>
+          <div className="industries-dots">
+            {INDUSTRIES.map((ind, i) => (
+              <button
+                key={ind.name}
+                aria-label={`Ir a ${ind.name}`}
+                onClick={() => goTo(i)}
+                className={`industry-dot ${active === i ? 'is-on' : ''}`}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </section>

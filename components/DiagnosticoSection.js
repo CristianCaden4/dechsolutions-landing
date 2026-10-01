@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import RollButton from './RollButton';
+import { prefersReducedMotion } from './scroll/engine';
 
 const SITUATIONS = [
   { text: 'Controlamos procesos en Excel', tag: 'excel' },
@@ -23,15 +25,37 @@ const SITUATIONS = [
 const RECOMMENDATIONS = {
   erp: 'Tu operación necesita un ERP modular como PYME Core, para centralizar ventas, compras, inventario y reportes en un solo lugar.',
   automation: 'Tu empresa se beneficiaría de automatizar procesos manuales y repetitivos para ganar tiempo y reducir errores.',
-  integration: 'Necesitas que tus sistemas se comuniquen entre sí — un trabajo de integración y sincronización de información.',
+  integration: 'Necesitas que tus sistemas se comuniquen entre sí: un trabajo de integración y sincronización de información.',
   excel: 'Es momento de migrar de hojas de Excel a un sistema centralizado que reduzca el trabajo manual y el riesgo de errores.',
   growth: 'Tu negocio está listo para escalar con tecnología que crezca junto con la operación, sin perder el control.',
   data: 'Tu negocio está listo para usar mejor sus datos: reportes confiables y visibilidad en tiempo real.',
 };
 
+function useTypewriter(text, active) {
+  const [out, setOut] = useState('');
+  useEffect(() => {
+    if (!active) return undefined;
+    if (prefersReducedMotion()) {
+      setOut(text);
+      return undefined;
+    }
+    let i = 0;
+    setOut('');
+    const id = setInterval(() => {
+      i += 2;
+      setOut(text.slice(0, i));
+      if (i >= text.length) clearInterval(id);
+    }, 16);
+    return () => clearInterval(id);
+  }, [text, active]);
+  return out;
+}
+
 export default function DiagnosticoSection() {
   const [selected, setSelected] = useState({});
-  const [analyzed, setAnalyzed] = useState(false);
+  const [phase, setPhase] = useState('idle'); // idle | scanning | done
+  const [runId, setRunId] = useState(0);
+  const panelRef = useRef(null);
 
   const toggle = (i) => {
     setSelected((s) => ({ ...s, [i]: !s[i] }));
@@ -57,46 +81,80 @@ export default function DiagnosticoSection() {
     ? RECOMMENDATIONS[topTag]
     : 'Selecciona al menos una situación para ver una recomendación.';
 
+  const typed = useTypewriter(recommendation, phase === 'done' ? runId : 0);
+
+  const analyze = () => {
+    setRunId((n) => n + 1);
+    if (prefersReducedMotion()) {
+      setPhase('done');
+      return;
+    }
+    setPhase('scanning');
+    setTimeout(() => setPhase('done'), 1100);
+  };
+
   return (
-    <section id="diagnostico" data-nav-theme="dark" style={{ position: 'relative', background: '#0A0A0A', padding: '100px 0', overflow: 'hidden' }}>
+    <section id="diagnostico" data-nav-theme="dark" className="diag" aria-labelledby="diag-title">
       <div className="dotted-bg" />
-      <div className="wrap-narrow" style={{ position: 'relative' }}>
-        <p className="eyebrow">DIAGNÓSTICO · SIN IA · SIN API</p>
-        <h2 className="section-heading dark" style={{ maxWidth: 700, fontSize: 'clamp(2rem, 4vw, 2.75rem)' }}>
-          ¿Qué necesita tu empresa para trabajar con más control?
-        </h2>
-        <p className="section-sub dark" style={{ marginBottom: 40 }}>
-          Selecciona las situaciones que se parecen a tu operación. El resultado se genera en esta
-          página, sin enviar información a servidores.
-        </p>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 32 }}>
-          {SITUATIONS.map((s, i) => (
-            <button
-              key={s.text}
-              className={`diag-pill ${selected[i] ? 'selected' : ''}`}
-              onClick={() => toggle(i)}
-            >
-              {s.text}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, margin: 0 }}>{selectedCount} seleccionadas</p>
-          <button className="btn-analyze" onClick={() => setAnalyzed(true)}>
-            Analizar
-          </button>
-        </div>
-
-        {analyzed && (
-          <div style={{ marginTop: 32, border: '1px solid rgba(100,206,251,0.3)', background: 'rgba(100,206,251,0.06)', borderRadius: 16, padding: '24px 28px' }}>
-            <p style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '0 0 10px' }}>
-              RECOMENDACIÓN
+      <div className="wrap diag-layout">
+        <div className="diag-copy">
+          <p className="tag-mono">
+            <span className="tag-mono__slash">//</span> Diagnóstico · sin IA · sin API
+          </p>
+          <h2 id="diag-title" className="section-heading dark">
+            ¿Qué necesita tu empresa para trabajar con más control?
+          </h2>
+          <p className="section-sub dark">
+            Selecciona las situaciones que se parecen a tu operación. El resultado se genera en esta página, sin enviar
+            información a servidores.
+          </p>
+          <div className="diag-actions">
+            <p className="diag-count">
+              <span className="mono">{selectedCount}</span> seleccionadas
             </p>
-            <p style={{ color: '#fff', fontSize: 16, lineHeight: 1.6, margin: 0 }}>{recommendation}</p>
+            <RollButton variant="accent" onClick={analyze} disabled={phase === 'scanning'}>
+              Analizar
+            </RollButton>
           </div>
-        )}
+        </div>
+
+        <div ref={panelRef} className={`diag-panel liquid-glass ${phase === 'scanning' ? 'is-scanning' : ''}`}>
+          <div className="diag-panel__bar mono" aria-hidden="true">
+            <span className="status-dot" />
+            diagnóstico.local
+            <span className="diag-panel__state">{phase === 'scanning' ? 'analizando…' : phase === 'done' ? 'listo' : 'esperando'}</span>
+          </div>
+          <div className="diag-pills">
+            {SITUATIONS.map((s, i) => (
+              <button
+                key={s.text}
+                className={`diag-pill ${selected[i] ? 'selected' : ''}`}
+                aria-pressed={!!selected[i]}
+                onClick={() => toggle(i)}
+                style={{ '--i': i }}
+              >
+                <span className="diag-pill__check" aria-hidden="true" />
+                {s.text}
+              </button>
+            ))}
+          </div>
+          <span className="diag-scan" aria-hidden="true" />
+
+          <div className={`diag-result ${phase === 'done' ? 'is-on' : ''}`} aria-live="polite">
+            {phase === 'done' && (
+              <>
+                <p className="diag-result__label mono">RECOMENDACIÓN</p>
+                <p className="diag-result__text">
+                  <span className="sr-only">{recommendation}</span>
+                  <span aria-hidden="true">
+                    {typed}
+                    <span className="caret" />
+                  </span>
+                </p>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </section>
   );

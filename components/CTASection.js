@@ -1,9 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
+import HeroShader from './HeroShader';
+import RollButton, { ArrowIcon } from './RollButton';
+import { useScrollProgress, ease } from './scroll/engine';
+
+const HEADING = ['Cuéntanos', 'cómo', 'funciona', 'tu', 'negocio.'];
 
 export default function CTASection() {
   const [sent, setSent] = useState(false);
+  const sectionRef = useRef(null);
+  const headRef = useRef(null);
+  const progressRef = useRef(0);
 
   // TODO: este formulario todavía no envía datos a ningún sitio. Antes de publicar,
   // conéctalo a un servicio real (por ejemplo un endpoint serverless de Next.js que
@@ -14,47 +22,80 @@ export default function CTASection() {
     setSent(true);
   };
 
+  // the closing light settles as the section arrives, and the heading rises word by word
+  useScrollProgress(
+    sectionRef,
+    (p) => {
+      progressRef.current = 0.35 * (1 - ease.range(p, 0, 0.8));
+      headRef.current.querySelectorAll('.word > span').forEach((el, i) => {
+        const k = ease.outCubic(ease.range(p, 0.08 + i * 0.05, 0.5 + i * 0.05));
+        el.style.transform = `translate3d(0, ${(1 - k) * 105}%, 0)`;
+      });
+    },
+    { mode: 'enter' }
+  );
+
   return (
-    <section id="contacto" data-nav-theme="light" style={{ background: '#fff', padding: '100px 0' }}>
-      <div className="wrap">
-        <p className="eyebrow">EMPECEMOS</p>
-        <h2 className="section-heading light" style={{ maxWidth: 700, marginBottom: 56 }}>
-          Cuéntanos cómo funciona tu negocio.
+    <section ref={sectionRef} id="contacto" data-nav-theme="dark" className="cta" aria-labelledby="cta-title">
+      <div className="cta-bg">
+        <HeroShader preset="close" progressRef={progressRef} />
+        <div className="grain" aria-hidden="true" />
+      </div>
+
+      <div className="wrap cta-inner">
+        <p className="tag-mono">
+          <span className="tag-mono__slash">//</span> Empecemos
+        </p>
+        <h2 ref={headRef} id="cta-title" className="cta-heading">
+          {HEADING.map((w) => (
+            <Fragment key={w}>
+              <span className="word">
+                <span>{w}</span>
+              </span>{' '}
+            </Fragment>
+          ))}
         </h2>
 
         <div className="contact-grid">
           <div className="contact-links">
-            <a href="#productos">Conocer PYME Core →</a>
-            <a href="#productos">Conocer LexCore →</a>
-            <a href="https://wa.me/" target="_blank" rel="noopener noreferrer">WhatsApp directo →</a>
+            <a href="#productos">
+              Conocer PYME Core <ArrowIcon />
+            </a>
+            <a href="#productos">
+              Conocer LexCore <ArrowIcon />
+            </a>
+            <a href="https://wa.me/" target="_blank" rel="noopener noreferrer">
+              WhatsApp directo <ArrowIcon />
+            </a>
           </div>
 
-          <form className="contact-form" onSubmit={handleSubmit}>
+          <form className="contact-form liquid-glass-strong" onSubmit={handleSubmit}>
             {sent ? (
-              <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: '24px 20px' }}>
-                <p style={{ margin: 0, color: 'var(--ink)', fontSize: 15 }}>
-                  Gracias — recibimos tu mensaje. Te contactaremos pronto.
-                </p>
+              <div className="contact-sent" role="status">
+                <span className="status-dot" />
+                <p>Gracias, recibimos tu mensaje. Te contactaremos pronto.</p>
               </div>
             ) : (
               <>
                 <div className="contact-form-row">
-                  <input className="input" placeholder="Nombre" name="name" required />
-                  <input className="input" placeholder="Empresa" name="company" />
+                  <input className="input" placeholder="Nombre" name="name" aria-label="Nombre" required />
+                  <input className="input" placeholder="Empresa" name="company" aria-label="Empresa" />
                 </div>
-                <input className="input" placeholder="Correo" name="email" type="email" required />
-                <select className="input" name="need" defaultValue="">
-                  <option value="" disabled>Tipo de necesidad</option>
+                <input className="input" placeholder="Correo" name="email" type="email" aria-label="Correo" required />
+                <select className="input" name="need" defaultValue="" aria-label="Tipo de necesidad">
+                  <option value="" disabled>
+                    Tipo de necesidad
+                  </option>
                   <option>Software a la medida</option>
                   <option>PYME Core</option>
                   <option>LexCore</option>
                   <option>Automatización</option>
                   <option>Otro</option>
                 </select>
-                <textarea className="input" placeholder="Mensaje" name="message" rows={4} />
-                <button type="submit" className="btn-cta" style={{ alignSelf: 'flex-start' }}>
+                <textarea className="input" placeholder="Mensaje" name="message" aria-label="Mensaje" rows={4} />
+                <RollButton type="submit" variant="accent" className="contact-submit">
                   Enviar mensaje
-                </button>
+                </RollButton>
               </>
             )}
           </form>
