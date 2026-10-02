@@ -13,8 +13,9 @@ import { useEffect, useRef } from 'react';
              a backdrop blur over a canvas that changes every frame is re-blurred every frame.
    - grain:  per-frame noise
   Cost control: the noise field is evaluated once per pixel (only the cheap light term is sampled
-  three times for the aberration), the canvas renders below CSS resolution, and the resolution
-  steps down on its own if frames run long.
+  three times for the aberration). Resolution follows the screen's pixel density within a pixel
+  budget, so it stays sharp on retina/phone screens without rendering 9x the pixels; an adaptive
+  quality loop steps it down when frames run long and back up once there is headroom.
 */
 
 const VERT = `attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}`;
@@ -34,6 +35,7 @@ uniform vec3 uFlowA;
 uniform vec3 uFlowB;
 uniform vec4 uChev[3];
 uniform float uChevA[3];
+uniform float uPx;
 
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.-2.*f);
@@ -77,11 +79,13 @@ void main(){
   vec3 tint = vec3(0.);
   for(int k=0;k<3;k++){
     vec3 c = chev(frag, uChev[k]);
-    if(c.x > 0. && uChevA[k] > 0.){
-      float w = uChevA[k];
+    // c.x is the distance inside the lens in render pixels: a one-pixel ramp antialiases its outline
+    float cov = clamp(c.x + .5, 0., 1.);
+    if(cov > 0. && uChevA[k] > 0.){
+      float w = uChevA[k]*cov;
       off += vec2(c.y*.05, (c.z-.5)*.02)*w;
       inside = max(inside, w);
-      edge = max(edge, smoothstep(2.2, 0., c.x)*w);
+      edge = max(edge, smoothstep(2.2*uPx, 0., c.x)*w);
       lift = max(lift, (.35+.65*c.z)*w);
       tint += (k==0 ? vec3(.85,.9,1.) : k==1 ? vec3(.18,.61,.84) : vec3(.39,.81,.98))*w;
     }
@@ -103,7 +107,7 @@ void main(){
 
   col *= 1. - .38*pow(length((uv-vec2(.5,.45))*vec2(1.05,1.25)), 2.);
   col *= 1. - uScroll*.5;
-  col += (hash(frag + fract(uTime*7.)*100.)-.5)*.05;
+  col += (hash(frag + fract(uTime*7.)*100.)-.5)*.04;
   gl_FragColor = vec4(col,1.);
 }
 `;
@@ -205,20 +209,30 @@ export default function HeroShader({ preset = 'hero', progressRef, sceneRef, cla
     const uScroll = u('uScroll');
     const uChev = u('uChev');
     const uChevA = u('uChevA');
+    const uPx = u('uPx');
     const chev = new Float32Array(12);
     const chevA = new Float32Array(3);
     gl.uniform1fv(uChevA, chevA);
 
-    // render resolution, relative to CSS pixels; steps down if the device struggles
+    // Render resolution (render pixels per CSS pixel): the screen's density, capped by a per-frame
+    // pixel budget, times an adaptive `quality`. A 1440x900 screen renders natively; a phone at 3x
+    // renders at 2x (sharp), a large retina display is held to the budget instead of 4x the pixels.
     const coarse = window.matchMedia('(pointer: coarse)').matches;
-    let scale = coarse ? 0.38 : 0.5;
-    const MIN_SCALE = 0.28;
+    const DPR = Math.min(window.devicePixelRatio || 1, 2);
+    const BUDGET = coarse ? 1.4e6 : 2.6e6;
+    const MIN_SCALE = 0.5;
+    const Q_MIN = 0.45;
+    let quality = 1;
+    let scale = 1;
     let cssW = 1;
     let cssH = 1;
     const resize = () => {
       const r = canvas.getBoundingClientRect();
       cssW = r.width;
       cssH = r.height;
+      const fit = Math.min(DPR, Math.sqrt(BUDGET / Math.max(1, cssW * cssH)));
+      scale = Math.max(MIN_SCALE, fit * quality);
+      gl.uniform1f(uPx, scale);
       canvas.width = Math.max(2, Math.round(cssW * scale));
       canvas.height = Math.max(2, Math.round(cssH * scale));
       gl.viewport(0, 0, canvas.width, canvas.height);
@@ -294,19 +308,53 @@ export default function HeroShader({ preset = 'hero', progressRef, sceneRef, cla
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
 
-    // adaptive quality: if the page averages under ~48fps, render fewer pixels
+    // Adaptive quality, measured over windows of frames. `best` (the fastest window seen) is the
+    // display's refresh interval, so this works on 60 and 120Hz screens alike.
+    //  - slow (under ~50fps, or clearly behind the display): render fewer pixels;
+    //  - several windows in a row at full speed: render more again, up to the budget;
+    //  - a step up that immediately runs slow sets a ceiling, so it never oscillates.
+    const WINDOW = 40;
     let acc = 0;
     let count = 0;
     let prev = 0;
+    let best = Infinity;
+    let good = 0;
+    let skip = 1; // ignore the first window (shader warm-up, the intro curtain)
+    let ceiling = 1;
+    let lastUp = -9;
+    let windows = 0;
+    const adapt = (avg) => {
+      windows++;
+      if (skip > 0) {
+        skip--;
+        return;
+      }
+      best = Math.min(best, avg);
+      const slow = avg > 20 || avg > best * 1.3 + 1.5;
+      if (slow && quality > Q_MIN) {
+        if (windows - lastUp <= 2) ceiling = quality * 0.85;
+        quality = Math.max(Q_MIN, quality * 0.85);
+        good = 0;
+        skip = 1;
+        resize();
+      } else if (!slow && avg < best * 1.1 && quality < ceiling) {
+        if (++good >= 4) {
+          quality = Math.min(ceiling, quality / 0.85);
+          good = 0;
+          skip = 1;
+          lastUp = windows;
+          resize();
+        }
+      } else {
+        good = 0;
+      }
+    };
     const frame = (now) => {
       if (prev) {
         acc += now - prev;
         count++;
-        if (count === 90) {
-          if (acc / count > 21 && scale > MIN_SCALE) {
-            scale = Math.max(MIN_SCALE, scale * 0.8);
-            resize();
-          }
+        if (count === WINDOW) {
+          adapt(acc / count);
           acc = 0;
           count = 0;
         }
@@ -321,6 +369,8 @@ export default function HeroShader({ preset = 'hero', progressRef, sceneRef, cla
       if (running || reduced || !inView || document.hidden) return;
       running = true;
       prev = 0;
+      acc = 0;
+      count = 0;
       raf = requestAnimationFrame(frame);
     };
     const pause = () => {
