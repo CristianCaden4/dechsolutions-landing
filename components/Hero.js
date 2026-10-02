@@ -182,6 +182,11 @@ export default function Hero() {
               </h1>
 
               <div ref={ctasRef} className="hero-ctas-wrap">
+                {/* on phones the intro moves under the headline, shorter, so the headline reads first */}
+                <p className="hero-lede">
+                  Construimos el software, las automatizaciones y los sistemas que tu empresa necesita para operar mejor
+                  y crecer.
+                </p>
                 <div className="hero-ctas">
                   <RollButton href="#contacto" variant="accent">
                     Hablemos de tu negocio

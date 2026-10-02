@@ -128,7 +128,7 @@ function layoutChevrons(out, alphaOut, cssW, cssH, scale, scene) {
   const W = mobile ? Math.min(96, Math.max(56, cssW * 0.17)) : Math.min(220, Math.max(78, cssW * 0.12));
   const H = W * 2.06;
   const right = cssW * (mobile ? 0.06 : 0.07);
-  const cy = mobile ? cssH * 0.31 + W * 1.03 : cssH * 0.44;
+  const cy = mobile ? cssH * 0.265 + W * 1.03 : cssH * 0.44;
   const midX = cssW - right - W / 2 - 1.14 * W;
   const p = scene.p;
   const e = outCubic(p);

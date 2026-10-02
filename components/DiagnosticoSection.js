@@ -58,6 +58,13 @@ export default function DiagnosticoSection() {
   const [phase, setPhase] = useState('idle'); // idle | scanning | done
   const [runId, setRunId] = useState(0);
   const panelRef = useRef(null);
+  const resultRef = useRef(null);
+
+  // on phones and tablets the result appears below a long list: bring it into view
+  useEffect(() => {
+    if (phase !== 'done' || window.innerWidth >= 1024) return;
+    resultRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' });
+  }, [phase, runId]);
 
   const toggle = (i) => {
     setSelected((s) => ({ ...s, [i]: !s[i] }));
@@ -113,7 +120,7 @@ export default function DiagnosticoSection() {
           </p>
           <div className="diag-actions">
             <p className="diag-count">
-              <span className="mono">{selectedCount}</span> seleccionadas
+              <span className="mono">{selectedCount}</span> {selectedCount === 1 ? 'seleccionada' : 'seleccionadas'}
             </p>
             <RollButton variant="accent" onClick={analyze} disabled={phase === 'scanning'}>
               Analizar
@@ -143,7 +150,17 @@ export default function DiagnosticoSection() {
           </div>
           <span className="diag-scan" aria-hidden="true" />
 
-          <div className={`diag-result ${phase === 'done' ? 'is-on' : ''}`} aria-live="polite">
+          {/* below 1024px the action travels with the list instead of waiting above it */}
+          <div className="diag-dock">
+            <p className="diag-count">
+              <span className="mono">{selectedCount}</span> {selectedCount === 1 ? 'seleccionada' : 'seleccionadas'}
+            </p>
+            <RollButton variant="accent" size="sm" onClick={analyze} disabled={phase === 'scanning'}>
+              {phase === 'scanning' ? 'Analizando…' : 'Analizar'}
+            </RollButton>
+          </div>
+
+          <div ref={resultRef} className={`diag-result ${phase === 'done' ? 'is-on' : ''}`} aria-live="polite">
             {phase === 'done' && (
               <>
                 <p className="diag-result__label mono">RECOMENDACIÓN</p>

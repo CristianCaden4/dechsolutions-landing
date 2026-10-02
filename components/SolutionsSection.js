@@ -85,7 +85,9 @@ function SolutionCard({ s, i }) {
     { mode: 'enter' }
   );
 
+  // tilt follows a mouse only: on touch, pointermove fires while scrolling and would leave the card skewed
   const onMove = (e) => {
+    if (e.pointerType !== 'mouse') return;
     const el = ref.current;
     const r = el.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width;

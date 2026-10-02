@@ -130,6 +130,7 @@ function ProductCard({ prod, index }) {
   const { Mock } = prod;
   // the window leans toward the pointer
   const onMove = (e) => {
+    if (e.pointerType !== 'mouse') return;
     const r = e.currentTarget.getBoundingClientRect();
     e.currentTarget.style.setProperty('--tx', ((e.clientX - r.left) / r.width - 0.5).toFixed(3));
     e.currentTarget.style.setProperty('--ty', ((e.clientY - r.top) / r.height - 0.5).toFixed(3));

@@ -61,6 +61,13 @@ const INDUSTRIES = [
   },
 ];
 
+// Phones (and phones held sideways) get a native swipe carousel instead of the pinned pan:
+// the same coverflow, driven by the finger, without five screens of vertical scroll.
+const SWIPE_MQ = '(max-width: 767px), (max-height: 520px) and (orientation: landscape)';
+
+// Scroll room is the horizontal travel times DWELL, so the pan reads as a deliberate journey.
+const DWELL = 1.5;
+
 export default function IndustriesSection() {
   const sectionRef = useRef(null);
   const viewportRef = useRef(null);
@@ -70,79 +77,108 @@ export default function IndustriesSection() {
   const vpWidth = useRef(1);
   const centers = useRef([]);
   const lastVars = useRef([]);
+  const swipe = useRef(false);
   const [active, setActive] = useState(0);
   const activeRef = useRef(0);
 
-  // Scroll room is the horizontal travel times DWELL, so the pan reads as a deliberate journey.
-const DWELL = 1.5;
+  // depth: the card nearest the focal point comes forward; `x` is the track's offset, `p` the 0..1 progress
+  const paint = (x, p, focal) => {
+    barRef.current.style.transform = `scaleX(${0.08 + 0.92 * p})`;
+    const vw = vpWidth.current;
+    const cards = trackRef.current.children;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < cards.length; i++) {
+      const c = centers.current[i] + x - focal;
+      const d = Math.abs(c) / vw;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+      const focus = ease.clamp(1 - d * 1.8).toFixed(3);
+      // signed offset from the focal point drives the coverflow turn
+      const off = Math.max(-1, Math.min(1, c / (vw * 0.5))).toFixed(3);
+      const last = lastVars.current[i] || (lastVars.current[i] = {});
+      if (last.focus !== focus) cards[i].style.setProperty('--focus', (last.focus = focus));
+      if (last.off !== off) cards[i].style.setProperty('--off', (last.off = off));
+    }
+    if (best !== activeRef.current) {
+      activeRef.current = best;
+      setActive(best);
+    }
+  };
 
-// The section is as tall as the horizontal distance the track must travel.
+  // swipe mode: the viewport scrolls natively, so its scrollLeft is the progress
+  const paintSwipe = () => {
+    const vp = viewportRef.current;
+    const max = vp.scrollWidth - vp.clientWidth;
+    paint(-vp.scrollLeft, max > 0 ? vp.scrollLeft / max : 0, vpWidth.current / 2);
+  };
+
+  // Pinned mode: the section is as tall as the horizontal distance the track must travel.
   useEffect(() => {
     const size = () => {
-      if (prefersReducedMotion()) {
-        sectionRef.current.style.height = '';
-        return;
-      }
       const track = trackRef.current;
       const vp = viewportRef.current;
-      dist.current = Math.max(0, track.scrollWidth - vp.clientWidth);
-      // card centres relative to the track, cached so the scroll callback never reads layout
+      swipe.current = window.matchMedia(SWIPE_MQ).matches;
+      // card centres relative to the track, cached so the scroll callbacks never read layout
       vpWidth.current = vp.clientWidth;
       centers.current = [...track.children].map((c) => c.offsetLeft + c.offsetWidth / 2);
+      if (prefersReducedMotion() || swipe.current) {
+        sectionRef.current.style.height = '';
+        track.style.transform = '';
+        if (swipe.current && !prefersReducedMotion()) paintSwipe();
+        return;
+      }
+      dist.current = Math.max(0, track.scrollWidth - vp.clientWidth);
       sectionRef.current.style.height = `${window.innerHeight + dist.current * DWELL}px`;
     };
     size();
     const ro = new ResizeObserver(size);
     ro.observe(trackRef.current);
     window.addEventListener('resize', size);
+
+    let queued = false;
+    const onSwipe = () => {
+      if (!swipe.current || queued || prefersReducedMotion()) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        paintSwipe();
+      });
+    };
+    const vp = viewportRef.current;
+    vp.addEventListener('scroll', onSwipe, { passive: true });
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', size);
+      vp.removeEventListener('scroll', onSwipe);
     };
   }, []);
 
   useScrollProgress(
     sectionRef,
     (p) => {
-      if (prefersReducedMotion()) return;
+      if (prefersReducedMotion() || swipe.current) return;
       const x = -p * dist.current;
       trackRef.current.style.transform = `translate3d(${x}px, 0, 0)`;
-      barRef.current.style.transform = `scaleX(${0.08 + 0.92 * p})`;
-      // depth: the card nearest a focal point that sweeps left to right comes forward,
-      // so the first and the last card each get their moment
-      const vw = vpWidth.current;
-      const focal = vw * (0.24 + 0.52 * p);
-      const cards = trackRef.current.children;
-      let best = 0;
-      let bestD = Infinity;
-      for (let i = 0; i < cards.length; i++) {
-        const c = centers.current[i] + x - focal;
-        const d = Math.abs(c) / vw;
-        if (d < bestD) {
-          bestD = d;
-          best = i;
-        }
-        const focus = ease.clamp(1 - d * 1.8).toFixed(3);
-        // signed offset from the focal point drives the coverflow turn
-        const off = Math.max(-1, Math.min(1, c / (vw * 0.5))).toFixed(3);
-        const last = lastVars.current[i] || (lastVars.current[i] = {});
-        if (last.focus !== focus) cards[i].style.setProperty('--focus', (last.focus = focus));
-        if (last.off !== off) cards[i].style.setProperty('--off', (last.off = off));
-      }
-      if (best !== activeRef.current) {
-        activeRef.current = best;
-        setActive(best);
-      }
+      // a focal point that sweeps left to right, so the first and the last card each get their moment
+      paint(x, p, vpWidth.current * (0.24 + 0.52 * p));
     },
     { mode: 'pin', ease: 0.1 }
   );
 
-  // buttons and dots scroll the page to the matching point of the pan
+  // buttons and dots move to the matching card: by scrolling the page (pinned) or the carousel (swipe)
   const goTo = (i) => {
     const clamped = Math.max(0, Math.min(INDUSTRIES.length - 1, i));
+    const vp = viewportRef.current;
     if (prefersReducedMotion()) {
-      viewportRef.current.scrollTo({ left: trackRef.current.children[clamped].offsetLeft, behavior: 'auto' });
+      vp.scrollTo({ left: trackRef.current.children[clamped].offsetLeft, behavior: 'auto' });
       setActive(clamped);
+      return;
+    }
+    if (swipe.current) {
+      vp.scrollTo({ left: centers.current[clamped] - vpWidth.current / 2, behavior: 'smooth' });
       return;
     }
     const top = sectionRef.current.getBoundingClientRect().top + window.scrollY;
@@ -193,6 +229,13 @@ const DWELL = 1.5;
         </div>
 
         <div className="wrap industries-foot">
+          <span className="industries-hint mono" aria-hidden="true">
+            Desliza
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </span>
           <div className="industries-bar">
             <span ref={barRef} />
           </div>
