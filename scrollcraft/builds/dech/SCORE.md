@@ -48,3 +48,14 @@ caos/ensamblaje; el `pan` y el `stack` usan sticky pero con mecánicas distintas
 y no son contiguos al pico.
 
 Longitud aproximada: ~17 pantallas en escritorio, 9 actos (fuera de la banda 6-7 actos / 13.6-13.8vh).
+
+## Ronda 2 (feedback: "los puntos entre textos se ven muy IA", "animaciones aún más impactantes")
+
+- Fuera los separadores `·` y el prefijo `//`: los servicios del hero pasan a un selector que se decodifica, las etiquetas usan los chevrones del logo, el Diagnóstico usa insignias.
+- Intro de encendido (chevrones → línea de luz → apertura), una vez por sesión, se salta con scroll/tecla/clic.
+- Salida del hero: la cámara atraviesa el chevrón central y el titular se parte en dos.
+- Titular del hero letra por letra desde el desenfoque; títulos de sección palabra por palabra.
+- Cintas cruzadas entre Soluciones y Productos, empujadas por el scroll y que se inclinan con la velocidad.
+- Onda expansiva en el instante en que el sistema se conecta (refuerza el pico).
+- Industrias como carrusel 3D, ventanas de producto que se inclinan hacia el puntero, cursor con botones magnéticos.
+- Cierre: la firma "Dech Solutions" gigante sube letra por letra al final.

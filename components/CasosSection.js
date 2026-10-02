@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import { useScrollProgress, ease } from './scroll/engine';
+import SplitHeading from './fx/SplitHeading';
 
 const CASES = [
   {
@@ -118,9 +119,7 @@ export default function CasosSection() {
           </span>
           <span className="badge-pill">Casos de éxito</span>
         </div>
-        <h2 id="casos-title" className="section-heading dark casos-heading">
-          Cómo lo hemos resuelto.
-        </h2>
+        <SplitHeading id="casos-title" className="section-heading dark casos-heading" text="Cómo lo hemos resuelto." />
 
         <div className="casos-list">
           {CASES.map((c, i) => (

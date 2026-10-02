@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useScrollProgress, ease } from './scroll/engine';
+import SplitHeading from './fx/SplitHeading';
 
 const STEPS = [
   { n: '01', title: 'Entendemos', desc: 'Conocemos tu operación, procesos y objetivos.' },
@@ -98,9 +99,12 @@ export default function MethodologySection() {
     <section id="metodologia" data-nav-theme="light" className="method" aria-labelledby="method-title">
       <div className="wrap-narrow">
         <div className="method-head">
-          <h2 id="method-title" className="section-heading light">
-            No empezamos escribiendo <span className="method-code mono">código</span>.
-          </h2>
+          <SplitHeading
+            id="method-title"
+            className="section-heading light"
+            text="No empezamos escribiendo código."
+            highlight={{ word: 'código', className: 'method-code mono' }}
+          />
           <div>
             <p className="method-kicker">Cómo trabajamos</p>
             <p className="section-sub light">

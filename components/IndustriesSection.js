@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useScrollProgress, prefersReducedMotion, ease } from './scroll/engine';
+import SplitHeading from './fx/SplitHeading';
+import Kicker from './fx/Kicker';
 
 const INDUSTRIES = [
   {
@@ -117,6 +119,8 @@ const DWELL = 1.5;
         }
         const k = ease.clamp(1 - d * 1.8);
         cards[i].style.setProperty('--focus', k.toFixed(3));
+        // signed offset from the focal point drives the coverflow turn
+        cards[i].style.setProperty('--off', Math.max(-1, Math.min(1, c / (vw * 0.5))).toFixed(3));
       }
       if (best !== activeRef.current) {
         activeRef.current = best;
@@ -144,12 +148,8 @@ const DWELL = 1.5;
       <div className="industries-sticky">
         <div className="wrap industries-head">
           <div>
-            <p className="tag-mono light">
-              <span className="tag-mono__slash">//</span> Industrias
-            </p>
-            <h2 id="industries-title" className="section-heading light">
-              Tecnología para operaciones reales.
-            </h2>
+            <Kicker light>Industrias</Kicker>
+            <SplitHeading id="industries-title" className="section-heading light" text="Tecnología para operaciones reales." />
           </div>
           <div className="industries-controls">
             <button className="industry-arrow-btn" aria-label="Anterior" onClick={() => goTo(active - 1)}>

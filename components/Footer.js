@@ -1,8 +1,41 @@
+'use client';
+
+import { useRef } from 'react';
 import { LogoMark } from './Logo';
+import { useScrollProgress, ease } from './scroll/engine';
+
+const WORD = [...'Dech'].map((c) => [c, 'strong']).concat([...'Solutions'].map((c) => [c, 'muted']));
+
+/** The brand signature: oversized letters that rise into place as the page ends. */
+// progress is measured on the whole footer, so the letters finish rising before the page runs out
+function Wordmark({ footerRef }) {
+  const ref = useRef(null);
+  useScrollProgress(
+    footerRef,
+    (p) => {
+      const chars = ref.current.querySelectorAll('.wm-char');
+      chars.forEach((el, i) => {
+        const k = ease.outCubic(ease.range(p, 0.02 + i * 0.02, 0.36 + i * 0.02));
+        el.style.transform = `translate3d(0, ${(1 - k) * 100}%, 0) rotate(${(1 - k) * 12}deg)`;
+      });
+    },
+    { mode: 'enter' }
+  );
+  return (
+    <div ref={ref} className="footer-wordmark" aria-hidden="true">
+      {WORD.map(([c, tone], i) => (
+        <span key={i} className={`wm-mask ${tone} ${i === 4 ? 'gap' : ''}`}>
+          <span className="wm-char">{c}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export default function Footer() {
+  const footerRef = useRef(null);
   return (
-    <footer data-nav-theme="dark" className="footer">
+    <footer ref={footerRef} data-nav-theme="dark" className="footer">
       <div className="wrap">
         <div className="footer-grid">
           <div>
@@ -44,6 +77,7 @@ export default function Footer() {
           </div>
         </div>
         <p className="footer-copy">© 2026 DECH SOLUTIONS. Todos los derechos reservados.</p>
+        <Wordmark footerRef={footerRef} />
       </div>
     </footer>
   );

@@ -4,6 +4,7 @@ import { Fragment, useRef, useState } from 'react';
 import HeroShader from './HeroShader';
 import RollButton, { ArrowIcon } from './RollButton';
 import { useScrollProgress, ease } from './scroll/engine';
+import Kicker from './fx/Kicker';
 
 const HEADING = ['Cuéntanos', 'cómo', 'funciona', 'tu', 'negocio.'];
 
@@ -43,9 +44,7 @@ export default function CTASection() {
       </div>
 
       <div className="wrap cta-inner">
-        <p className="tag-mono">
-          <span className="tag-mono__slash">//</span> Empecemos
-        </p>
+        <Kicker>Empecemos</Kicker>
         <h2 ref={headRef} id="cta-title" className="cta-heading">
           {HEADING.map((w) => (
             <Fragment key={w}>

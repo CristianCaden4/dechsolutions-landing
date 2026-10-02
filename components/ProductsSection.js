@@ -3,6 +3,8 @@
 import { useEffect, useRef } from 'react';
 import RollButton from './RollButton';
 import { useScrollProgress, ease } from './scroll/engine';
+import SplitHeading from './fx/SplitHeading';
+import Kicker from './fx/Kicker';
 
 const PYME_MODULES = ['Ventas', 'Compras', 'Inventario', 'Clientes', 'Reportes'];
 const LEX_TABS = ['Casos', 'Clientes', 'Facturación'];
@@ -126,6 +128,16 @@ const PRODUCTS = [
 
 function ProductCard({ prod, index }) {
   const { Mock } = prod;
+  // the window leans toward the pointer
+  const onMove = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    e.currentTarget.style.setProperty('--tx', ((e.clientX - r.left) / r.width - 0.5).toFixed(3));
+    e.currentTarget.style.setProperty('--ty', ((e.clientY - r.top) / r.height - 0.5).toFixed(3));
+  };
+  const onLeave = (e) => {
+    e.currentTarget.style.setProperty('--tx', '0');
+    e.currentTarget.style.setProperty('--ty', '0');
+  };
   return (
     <article className="product-card" style={{ '--idx': index }}>
       <div className="product-card__copy">
@@ -143,7 +155,7 @@ function ProductCard({ prod, index }) {
           {prod.link}
         </RollButton>
       </div>
-      <div className="product-card__visual" aria-hidden="true">
+      <div className="product-card__visual" aria-hidden="true" onPointerMove={onMove} onPointerLeave={onLeave}>
         <Mock />
       </div>
     </article>
@@ -178,12 +190,8 @@ export default function ProductsSection() {
       <div className="dotted-bg" />
       <div className="wrap products-wrap">
         <div className="products-head">
-          <p className="tag-mono">
-            <span className="tag-mono__slash">//</span> Productos propios
-          </p>
-          <h2 id="products-title" className="section-heading dark">
-            Tecnología propia para operaciones reales.
-          </h2>
+          <Kicker>Productos propios</Kicker>
+          <SplitHeading id="products-title" className="section-heading dark" text="Tecnología propia para operaciones reales." />
         </div>
 
         <div ref={stackRef} className="products-stack">

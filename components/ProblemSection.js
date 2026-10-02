@@ -3,6 +3,8 @@
 import { useEffect, useRef } from 'react';
 import { LogoMark } from './Logo';
 import { useScrollProgress, useVisibleFrame, ease } from './scroll/engine';
+import SplitHeading from './fx/SplitHeading';
+import Kicker from './fx/Kicker';
 
 const FRAGMENTED = ['Excel', 'Procesos manuales', 'Información dispersa', 'Software aislado', 'Tareas repetitivas'];
 const CONNECTED = ['Sistemas integrados', 'Procesos automatizados', 'Información centralizada', 'Visibilidad en tiempo real'];
@@ -121,7 +123,7 @@ export default function ProblemSection() {
     const t = now / 1000;
     const p = s.p;
     const a1 = ease.smooth(ease.range(p, 0.1, 0.46));
-    const coreK = ease.range(p, 0.34, 0.5);
+    const coreK = ease.range(p, 0.26, 0.44);
     const a2 = ease.range(p, 0.5, 0.74);
 
     // ---- DOM planes
@@ -191,6 +193,19 @@ export default function ProblemSection() {
       ctx.fillRect(x - size / 2, y - size / 2, size, size);
     }
 
+    // shockwave: the instant the system connects, a ring of light rolls out from the core
+    if (a2 > 0.001 && a2 < 0.999) {
+      for (let k = 0; k < 2; k++) {
+        const q = ease.clamp(a2 * 1.25 - k * 0.22);
+        if (q <= 0 || q >= 1) continue;
+        ctx.beginPath();
+        ctx.arc(ccx, ccy, 60 + ease.outCubic(q) * maxD, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(100,206,251,${((1 - q) * (k ? 0.25 : 0.55)).toFixed(3)})`;
+        ctx.lineWidth = k ? 1 : 2;
+        ctx.stroke();
+      }
+    }
+
     const centerOf = (el) => {
       const r = el.getBoundingClientRect();
       return [r.left - cvs.left + r.width / 2, r.top - cvs.top + r.height / 2];
@@ -254,12 +269,8 @@ export default function ProblemSection() {
 
         <div className="wrap problem-layout">
           <div className="problem-copy">
-            <p className="tag-mono">
-              <span className="tag-mono__slash">//</span> El problema
-            </p>
-            <h2 id="problem-title" className="section-heading dark">
-              Tu empresa no debería adaptarse a un software rígido.
-            </h2>
+            <Kicker>El problema</Kicker>
+            <SplitHeading id="problem-title" className="section-heading dark" text="Tu empresa no debería adaptarse a un software rígido." />
             <p className="section-sub dark">
               La tecnología debería adaptarse a tu negocio y a la forma en que realmente funciona.
             </p>

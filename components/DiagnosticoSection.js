@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import RollButton from './RollButton';
 import { prefersReducedMotion } from './scroll/engine';
+import SplitHeading from './fx/SplitHeading';
+import Kicker from './fx/Kicker';
 
 const SITUATIONS = [
   { text: 'Controlamos procesos en Excel', tag: 'excel' },
@@ -98,12 +100,12 @@ export default function DiagnosticoSection() {
       <div className="dotted-bg" />
       <div className="wrap diag-layout">
         <div className="diag-copy">
-          <p className="tag-mono">
-            <span className="tag-mono__slash">//</span> Diagnóstico · sin IA · sin API
-          </p>
-          <h2 id="diag-title" className="section-heading dark">
-            ¿Qué necesita tu empresa para trabajar con más control?
-          </h2>
+          <div className="diag-labels">
+            <Kicker>Diagnóstico</Kicker>
+            <span className="diag-flag">Sin IA</span>
+            <span className="diag-flag">Sin API</span>
+          </div>
+          <SplitHeading id="diag-title" className="section-heading dark" text="¿Qué necesita tu empresa para trabajar con más control?" />
           <p className="section-sub dark">
             Selecciona las situaciones que se parecen a tu operación. El resultado se genera en esta página, sin enviar
             información a servidores.
