@@ -96,10 +96,11 @@ export default function DiagnosticoSection() {
   };
 
   return (
-    <section id="diagnostico" data-nav-theme="dark" className="diag" aria-labelledby="diag-title">
+    <section id="diagnostico" data-nav-theme="dark" data-spy="diagnostico" className="diag" aria-labelledby="diag-title">
       <div className="dotted-bg" />
+      <span className="section-rule" data-reveal aria-hidden="true" />
       <div className="wrap diag-layout">
-        <div className="diag-copy">
+        <div className="diag-copy" data-stagger>
           <div className="diag-labels">
             <Kicker>Diagnóstico</Kicker>
             <span className="diag-flag">Sin IA</span>
@@ -126,7 +127,7 @@ export default function DiagnosticoSection() {
             diagnóstico.local
             <span className="diag-panel__state">{phase === 'scanning' ? 'analizando…' : phase === 'done' ? 'listo' : 'esperando'}</span>
           </div>
-          <div className="diag-pills">
+          <div className="diag-pills" data-stagger>
             {SITUATIONS.map((s, i) => (
               <button
                 key={s.text}

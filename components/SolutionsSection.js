@@ -147,7 +147,7 @@ export default function SolutionsSection() {
   );
 
   return (
-    <section id="soluciones" data-nav-theme="light" className="solutions" aria-labelledby="solutions-title">
+    <section id="soluciones" data-nav-theme="light" data-spy="soluciones" className="solutions" aria-labelledby="solutions-title">
       <div className="wrap">
         <div className="badge-row">
           <span className="badge-num">
@@ -165,7 +165,7 @@ export default function SolutionsSection() {
             </span>
           ))}
         </h2>
-        <p className="section-sub light">
+        <p className="section-sub light" data-reveal>
           Te ayudamos a ordenar la operación, ahorrar tiempo y tomar decisiones con información confiable.
         </p>
 

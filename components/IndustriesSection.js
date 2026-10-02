@@ -67,6 +67,9 @@ export default function IndustriesSection() {
   const trackRef = useRef(null);
   const barRef = useRef(null);
   const dist = useRef(0);
+  const vpWidth = useRef(1);
+  const centers = useRef([]);
+  const lastVars = useRef([]);
   const [active, setActive] = useState(0);
   const activeRef = useRef(0);
 
@@ -83,6 +86,9 @@ const DWELL = 1.5;
       const track = trackRef.current;
       const vp = viewportRef.current;
       dist.current = Math.max(0, track.scrollWidth - vp.clientWidth);
+      // card centres relative to the track, cached so the scroll callback never reads layout
+      vpWidth.current = vp.clientWidth;
+      centers.current = [...track.children].map((c) => c.offsetLeft + c.offsetWidth / 2);
       sectionRef.current.style.height = `${window.innerHeight + dist.current * DWELL}px`;
     };
     size();
@@ -104,23 +110,24 @@ const DWELL = 1.5;
       barRef.current.style.transform = `scaleX(${0.08 + 0.92 * p})`;
       // depth: the card nearest a focal point that sweeps left to right comes forward,
       // so the first and the last card each get their moment
-      const vw = viewportRef.current.clientWidth;
+      const vw = vpWidth.current;
       const focal = vw * (0.24 + 0.52 * p);
       const cards = trackRef.current.children;
       let best = 0;
       let bestD = Infinity;
       for (let i = 0; i < cards.length; i++) {
-        const r = cards[i].getBoundingClientRect();
-        const c = r.left + r.width / 2 - focal;
+        const c = centers.current[i] + x - focal;
         const d = Math.abs(c) / vw;
         if (d < bestD) {
           bestD = d;
           best = i;
         }
-        const k = ease.clamp(1 - d * 1.8);
-        cards[i].style.setProperty('--focus', k.toFixed(3));
+        const focus = ease.clamp(1 - d * 1.8).toFixed(3);
         // signed offset from the focal point drives the coverflow turn
-        cards[i].style.setProperty('--off', Math.max(-1, Math.min(1, c / (vw * 0.5))).toFixed(3));
+        const off = Math.max(-1, Math.min(1, c / (vw * 0.5))).toFixed(3);
+        const last = lastVars.current[i] || (lastVars.current[i] = {});
+        if (last.focus !== focus) cards[i].style.setProperty('--focus', (last.focus = focus));
+        if (last.off !== off) cards[i].style.setProperty('--off', (last.off = off));
       }
       if (best !== activeRef.current) {
         activeRef.current = best;

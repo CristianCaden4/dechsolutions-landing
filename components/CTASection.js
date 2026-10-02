@@ -37,10 +37,9 @@ export default function CTASection() {
   );
 
   return (
-    <section ref={sectionRef} id="contacto" data-nav-theme="dark" className="cta" aria-labelledby="cta-title">
+    <section ref={sectionRef} id="contacto" data-nav-theme="dark" data-spy="contacto" className="cta" aria-labelledby="cta-title">
       <div className="cta-bg">
         <HeroShader preset="close" progressRef={progressRef} />
-        <div className="grain" aria-hidden="true" />
       </div>
 
       <div className="wrap cta-inner">
@@ -56,7 +55,7 @@ export default function CTASection() {
         </h2>
 
         <div className="contact-grid">
-          <div className="contact-links">
+          <div className="contact-links" data-stagger>
             <a href="#productos">
               Conocer PYME Core <ArrowIcon />
             </a>
@@ -68,7 +67,7 @@ export default function CTASection() {
             </a>
           </div>
 
-          <form className="contact-form liquid-glass-strong" onSubmit={handleSubmit}>
+          <form className="contact-form liquid-glass-strong" onSubmit={handleSubmit} data-stagger>
             {sent ? (
               <div className="contact-sent" role="status">
                 <span className="status-dot" />

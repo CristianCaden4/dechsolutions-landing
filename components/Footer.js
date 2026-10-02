@@ -37,7 +37,7 @@ export default function Footer() {
   return (
     <footer ref={footerRef} data-nav-theme="dark" className="footer">
       <div className="wrap">
-        <div className="footer-grid">
+        <div className="footer-grid" data-stagger>
           <div>
             <div className="footer-brand">
               <LogoMark />

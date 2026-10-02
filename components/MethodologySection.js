@@ -96,7 +96,7 @@ export default function MethodologySection() {
   );
 
   return (
-    <section id="metodologia" data-nav-theme="light" className="method" aria-labelledby="method-title">
+    <section id="metodologia" data-nav-theme="light" data-spy="metodologia" className="method" aria-labelledby="method-title">
       <div className="wrap-narrow">
         <div className="method-head">
           <SplitHeading
@@ -105,7 +105,7 @@ export default function MethodologySection() {
             text="No empezamos escribiendo código."
             highlight={{ word: 'código', className: 'method-code mono' }}
           />
-          <div>
+          <div data-stagger>
             <p className="method-kicker">Cómo trabajamos</p>
             <p className="section-sub light">
               Primero entendemos el problema. Después diseñamos la tecnología correcta para resolverlo.

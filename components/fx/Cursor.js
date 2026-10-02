@@ -21,6 +21,7 @@ export default function Cursor() {
     const pos = { x: -100, y: -100, tx: -100, ty: -100 };
     let magnet = null;
     let raf = 0;
+    let running = false;
 
     const release = () => {
       if (magnet) magnet.style.translate = '';
@@ -30,6 +31,10 @@ export default function Cursor() {
     const onMove = (e) => {
       pos.tx = e.clientX;
       pos.ty = e.clientY;
+      if (!running) {
+        running = true;
+        raf = requestAnimationFrame(loop);
+      }
       const t = e.target instanceof Element ? e.target : null;
       ring.classList.toggle('is-hover', !!t?.closest(INTERACTIVE));
       ring.classList.toggle('is-hidden', !!t?.closest(TEXT_INPUT));
@@ -52,13 +57,17 @@ export default function Cursor() {
     const onDown = () => ring.classList.add('is-down');
     const onUp = () => ring.classList.remove('is-down');
 
-    const loop = () => {
+    // the ring eases toward the pointer and the loop sleeps once it has arrived
+    function loop() {
       pos.x += (pos.tx - pos.x) * 0.2;
       pos.y += (pos.ty - pos.y) * 0.2;
-      ring.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
+      ring.style.transform = `translate3d(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px, 0)`;
+      if (Math.abs(pos.tx - pos.x) < 0.1 && Math.abs(pos.ty - pos.y) < 0.1) {
+        running = false;
+        return;
+      }
       raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
+    }
 
     window.addEventListener('pointermove', onMove, { passive: true });
     document.documentElement.addEventListener('pointerleave', onLeave);

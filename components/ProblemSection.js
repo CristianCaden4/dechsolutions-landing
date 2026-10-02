@@ -76,15 +76,23 @@ export default function ProblemSection() {
   const connLabelRef = useRef(null);
   const st = useRef({ p: 0, parts: null, w: 0, h: 0, dpr: 1 });
 
-  // particle field, rebuilt on resize: each particle has a chaotic position and a slot in the brand's dot grid
+  // particle field + stage geometry, rebuilt on resize. Everything the frame loop needs about layout
+  // is cached here, so the loop itself never reads layout.
   useEffect(() => {
     const canvas = canvasRef.current;
     const build = () => {
       const r = canvas.getBoundingClientRect();
+      const stage = stageRef.current.getBoundingClientRect();
       const s = st.current;
-      s.dpr = Math.min(window.devicePixelRatio || 1, 2);
+      s.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       s.w = r.width;
       s.h = r.height;
+      s.hw = stage.width / 2;
+      s.hh = stage.height / 2;
+      // the stage and the canvas live in the same sticky box, so this offset never changes while pinned
+      s.ccx = stage.left - r.left + s.hw;
+      s.ccy = stage.top - r.top + s.hh;
+      s.maxD = Math.hypot(Math.max(s.ccx, s.w - s.ccx), Math.max(s.ccy, s.h - s.ccy));
       canvas.width = Math.round(r.width * s.dpr);
       canvas.height = Math.round(r.height * s.dpr);
       const gap = r.width < 700 ? 30 : 40;
@@ -93,19 +101,34 @@ export default function ProblemSection() {
       const ox = (r.width - (cols - 1) * gap) / 2;
       const oy = (r.height - (rows - 1) * gap) / 2;
       const n = cols * rows;
-      const parts = { n, x: new Float32Array(n), y: new Float32Array(n), gx: new Float32Array(n), gy: new Float32Array(n), sp: new Float32Array(n) };
+      const parts = {
+        n,
+        x: new Float32Array(n),
+        y: new Float32Array(n),
+        gx: new Float32Array(n),
+        gy: new Float32Array(n),
+        sp: new Float32Array(n),
+        dist: new Float32Array(n),
+        px: new Float32Array(n),
+        py: new Float32Array(n),
+        bucket: new Uint8Array(n),
+        order: new Uint16Array(n),
+      };
       for (let i = 0; i < n; i++) {
         parts.gx[i] = ox + (i % cols) * gap;
         parts.gy[i] = oy + Math.floor(i / cols) * gap;
         parts.x[i] = Math.random() * r.width;
         parts.y[i] = Math.random() * r.height;
         parts.sp[i] = 0.35 + Math.random() * 0.9;
+        parts.dist[i] = Math.hypot(parts.gx[i] - s.ccx, parts.gy[i] - s.ccy);
       }
       s.parts = parts;
+      s.last = {};
     };
     build();
     const ro = new ResizeObserver(build);
     ro.observe(canvas);
+    ro.observe(stageRef.current);
     return () => ro.disconnect();
   }, []);
 
@@ -117,6 +140,14 @@ export default function ProblemSection() {
     { mode: 'pin', ease: 0.09 }
   );
 
+  // write a style only when it changed
+  const put = (el, key, prop, value) => {
+    const last = st.current.last;
+    if (last[key] === value) return;
+    last[key] = value;
+    el.style[prop] = value;
+  };
+
   useVisibleFrame(stickyRef, (now) => {
     const s = st.current;
     if (!s.parts) return;
@@ -125,72 +156,91 @@ export default function ProblemSection() {
     const a1 = ease.smooth(ease.range(p, 0.1, 0.46));
     const coreK = ease.range(p, 0.26, 0.44);
     const a2 = ease.range(p, 0.5, 0.74);
+    const { hw, hh, ccx, ccy, maxD, w, h, dpr, parts } = s;
 
-    // ---- DOM planes
-    const stage = stageRef.current.getBoundingClientRect();
-    const cvs = canvasRef.current.getBoundingClientRect();
-    const hw = stage.width / 2;
-    const hh = stage.height / 2;
+    // ---- DOM planes (chip centres are computed, not measured)
     const k1 = ease.outCubic(a1);
+    const fragC = [];
     fragRefs.current.forEach((el, i) => {
       const [fx, fy, rot] = FRAG_POS[i];
       const drift = 1 - k1;
       const x = fx * hw * 0.86 * drift + Math.sin(t * 0.7 + i * 1.7) * 10 * drift;
       const y = fy * hh * 0.86 * drift + Math.cos(t * 0.9 + i) * 8 * drift;
+      fragC.push([ccx + x, ccy + y]);
+      const op = 1 - ease.range(a1, 0.72, 1);
+      put(el, `fo${i}`, 'opacity', op.toFixed(3));
+      if (op <= 0) return;
       const r = rot * drift + Math.sin(t * 1.3 + i) * 2.5 * drift;
-      el.style.transform = `translate(-50%, -50%) translate3d(${x}px, ${y}px, 0) rotate(${r}deg) scale(${1 - 0.6 * k1})`;
-      el.style.opacity = 1 - ease.range(a1, 0.72, 1);
+      el.style.transform = `translate(-50%, -50%) translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) rotate(${r.toFixed(2)}deg) scale(${(1 - 0.6 * k1).toFixed(3)})`;
     });
-    const coreS = 0.35 + 0.65 * ease.outCubic(coreK);
-    coreRef.current.style.transform = `translate(-50%, -50%) scale(${coreS})`;
-    coreRef.current.style.opacity = coreK;
+    put(coreRef.current, 'ct', 'transform', `translate(-50%, -50%) scale(${(0.35 + 0.65 * ease.outCubic(coreK)).toFixed(3)})`);
+    put(coreRef.current, 'co', 'opacity', coreK.toFixed(3));
     const k2 = ease.outCubic(a2);
+    const connC = [];
     connRefs.current.forEach((el, i) => {
       const [cx, cy] = CONN_POS[i];
-      el.style.transform = `translate(-50%, -50%) translate3d(${cx * hw * 0.84 * k2}px, ${cy * hh * 0.84 * k2}px, 0) scale(${0.5 + 0.5 * k2})`;
-      el.style.opacity = ease.range(a2, 0.05, 0.5);
+      const x = cx * hw * 0.84 * k2;
+      const y = cy * hh * 0.84 * k2;
+      connC.push([ccx + x, ccy + y]);
+      put(el, `nt${i}`, 'transform', `translate(-50%, -50%) translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${(0.5 + 0.5 * k2).toFixed(3)})`);
+      put(el, `no${i}`, 'opacity', ease.range(a2, 0.05, 0.5).toFixed(3));
     });
-    fragLabelRef.current.style.opacity = 1 - ease.range(p, 0.3, 0.42);
-    fragLabelRef.current.style.transform = `translateY(${-ease.range(p, 0.3, 0.42) * 14}px)`;
-    connLabelRef.current.style.opacity = ease.range(p, 0.48, 0.6);
-    connLabelRef.current.style.transform = `translateY(${(1 - ease.range(p, 0.48, 0.6)) * 14}px)`;
+    const fl = ease.range(p, 0.3, 0.42);
+    const cl = ease.range(p, 0.48, 0.6);
+    put(fragLabelRef.current, 'flo', 'opacity', (1 - fl).toFixed(3));
+    put(fragLabelRef.current, 'flt', 'transform', `translateY(${(-fl * 14).toFixed(1)}px)`);
+    put(connLabelRef.current, 'clo', 'opacity', cl.toFixed(3));
+    put(connLabelRef.current, 'clt', 'transform', `translateY(${((1 - cl) * 14).toFixed(1)}px)`);
 
     // ---- canvas plane
     const ctx = canvasRef.current.getContext('2d');
-    const { w, h, dpr, parts } = s;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const ccx = stage.left - cvs.left + hw;
-    const ccy = stage.top - cvs.top + hh;
-    const maxD = Math.hypot(Math.max(ccx, w - ccx), Math.max(ccy, h - ccy));
     const pulseR = ((t * 320) % (maxD + 300)) - 60;
 
+    // particles: position + a colour bucket each, then one fillStyle per bucket (not per particle)
+    const COLORS = 8;
+    const PULSES = 3;
+    const counts = new Uint16Array(COLORS * PULSES);
     for (let i = 0; i < parts.n; i++) {
-      // chaos: drift along a slowly turning flow field
-      const ang = (Math.sin(parts.x[i] * 0.0035 + t * 0.4) + Math.cos(parts.y[i] * 0.004 - t * 0.3)) * Math.PI;
-      parts.x[i] += Math.cos(ang) * parts.sp[i];
-      parts.y[i] += Math.sin(ang) * parts.sp[i];
-      if (parts.x[i] < 0) parts.x[i] += w;
-      else if (parts.x[i] > w) parts.x[i] -= w;
-      if (parts.y[i] < 0) parts.y[i] += h;
-      else if (parts.y[i] > h) parts.y[i] -= h;
-
-      const gx = parts.gx[i];
-      const gy = parts.gy[i];
-      const dist = Math.hypot(gx - ccx, gy - ccy);
-      const d = dist / maxD;
+      const d = parts.dist[i] / maxD;
       // assembly ripples outward from the core
       const a = ease.smooth(ease.range(p, 0.12 + d * 0.24, 0.32 + d * 0.24));
-      const x = parts.x[i] + (gx - parts.x[i]) * a;
-      const y = parts.y[i] + (gy - parts.y[i]) * a;
-      const pulse = a2 > 0 ? Math.exp(-((dist - pulseR) ** 2) / 3200) * a2 : 0;
+      if (a < 1) {
+        // chaos: drift along a slowly turning flow field (skipped once a particle has settled)
+        const ang = (Math.sin(parts.x[i] * 0.0035 + t * 0.4) + Math.cos(parts.y[i] * 0.004 - t * 0.3)) * Math.PI;
+        parts.x[i] += Math.cos(ang) * parts.sp[i];
+        parts.y[i] += Math.sin(ang) * parts.sp[i];
+        if (parts.x[i] < 0) parts.x[i] += w;
+        else if (parts.x[i] > w) parts.x[i] -= w;
+        if (parts.y[i] < 0) parts.y[i] += h;
+        else if (parts.y[i] > h) parts.y[i] -= h;
+      }
+      parts.px[i] = parts.x[i] + (parts.gx[i] - parts.x[i]) * a;
+      parts.py[i] = parts.y[i] + (parts.gy[i] - parts.y[i]) * a;
+      const pulse = a2 > 0 ? Math.exp(-((parts.dist[i] - pulseR) ** 2) / 3200) * a2 : 0;
+      const b = Math.round(a * (COLORS - 1)) * PULSES + Math.min(PULSES - 1, Math.round(pulse * (PULSES - 1)));
+      parts.bucket[i] = b;
+      counts[b]++;
+    }
+    const starts = new Uint16Array(COLORS * PULSES);
+    for (let b = 1; b < starts.length; b++) starts[b] = starts[b - 1] + counts[b - 1];
+    const fill = starts.slice();
+    for (let i = 0; i < parts.n; i++) parts.order[fill[parts.bucket[i]]++] = i;
+    for (let b = 0; b < starts.length; b++) {
+      if (!counts[b]) continue;
+      const a = Math.floor(b / PULSES) / (COLORS - 1);
+      const pulse = (b % PULSES) / (PULSES - 1);
       const r = RED[0] + (CYAN[0] - RED[0]) * a;
       const g = RED[1] + (CYAN[1] - RED[1]) * a;
-      const b = RED[2] + (CYAN[2] - RED[2]) * a;
-      const alpha = 0.62 - 0.34 * a + pulse * 0.7;
+      const bl = RED[2] + (CYAN[2] - RED[2]) * a;
+      ctx.fillStyle = `rgba(${r | 0},${g | 0},${bl | 0},${(0.62 - 0.34 * a + pulse * 0.7).toFixed(3)})`;
       const size = 1.6 + (1 - a) * 1.1 + pulse * 1.4;
-      ctx.fillStyle = `rgba(${r | 0},${g | 0},${b | 0},${alpha.toFixed(3)})`;
-      ctx.fillRect(x - size / 2, y - size / 2, size, size);
+      const half = size / 2;
+      for (let j = starts[b]; j < starts[b] + counts[b]; j++) {
+        const i = parts.order[j];
+        ctx.fillRect(parts.px[i] - half, parts.py[i] - half, size, size);
+      }
     }
 
     // shockwave: the instant the system connects, a ring of light rolls out from the core
@@ -206,15 +256,10 @@ export default function ProblemSection() {
       }
     }
 
-    const centerOf = (el) => {
-      const r = el.getBoundingClientRect();
-      return [r.left - cvs.left + r.width / 2, r.top - cvs.top + r.height / 2];
-    };
-
     // broken red links between the fragments
     const brokenA = (1 - a1) * 0.4;
     if (brokenA > 0.01) {
-      const c = fragRefs.current.map(centerOf);
+      const c = fragC;
       ctx.setLineDash([3, 7]);
       ctx.lineDashOffset = -t * 18;
       ctx.lineWidth = 1;
@@ -238,8 +283,7 @@ export default function ProblemSection() {
     if (a2 > 0.01) {
       ctx.lineWidth = 1.2;
       ctx.strokeStyle = 'rgba(100,206,251,0.55)';
-      connRefs.current.forEach((el, i) => {
-        const [x2, y2] = centerOf(el);
+      connC.forEach(([x2, y2], i) => {
         const midX = ccx + (x2 - ccx) * 0.55;
         const pts = [
           [ccx, ccy],
@@ -247,12 +291,11 @@ export default function ProblemSection() {
           [midX, y2],
           [x2, y2],
         ];
-        const f = ease.range(a2, 0.1, 0.85);
-        strokePartial(ctx, pts, f);
+        strokePartial(ctx, pts, ease.range(a2, 0.1, 0.85));
         if (a2 > 0.85) {
+          ctx.fillStyle = 'rgba(234,248,255,0.95)';
           for (let m = 0; m < 2; m++) {
             const [px, py] = along(pts, (t * 0.42 + i * 0.27 + m * 0.5) % 1);
-            ctx.fillStyle = 'rgba(234,248,255,0.95)';
             ctx.beginPath();
             ctx.arc(px, py, 2.4, 0, Math.PI * 2);
             ctx.fill();
@@ -263,7 +306,7 @@ export default function ProblemSection() {
   });
 
   return (
-    <section ref={sectionRef} data-nav-theme="dark" className="problem" aria-labelledby="problem-title">
+    <section ref={sectionRef} data-nav-theme="dark" data-spy="inicio" className="problem" aria-labelledby="problem-title">
       <div ref={stickyRef} className="problem-sticky">
         <canvas ref={canvasRef} className="problem-canvas" aria-hidden="true" />
 

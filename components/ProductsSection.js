@@ -139,8 +139,8 @@ function ProductCard({ prod, index }) {
     e.currentTarget.style.setProperty('--ty', '0');
   };
   return (
-    <article className="product-card" style={{ '--idx': index }}>
-      <div className="product-card__copy">
+    <article className="product-card" data-spy={index === 0 ? 'pyme' : 'lexcore'} style={{ '--idx': index }}>
+      <div className="product-card__copy" data-stagger>
         <p className="product-kicker">{prod.kicker}</p>
         <h3>{prod.name}</h3>
         <p className="product-desc">{prod.desc}</p>
@@ -166,28 +166,50 @@ export default function ProductsSection() {
   const stackRef = useRef(null);
 
   // cards are sticky siblings: each one rises in, then recedes while the next one slides over it
+  const geo = useRef({ cards: [], stick: [], last: [] });
+
+  // the sticky offsets only change with the layout, so read them once (and on resize)
+  useEffect(() => {
+    const read = () => {
+      const cards = [...stackRef.current.querySelectorAll('.product-card')];
+      geo.current.cards = cards;
+      geo.current.stick = cards.map((c) => parseFloat(getComputedStyle(c).top) || 0);
+      geo.current.last = cards.map(() => ({}));
+    };
+    read();
+    window.addEventListener('resize', read);
+    return () => window.removeEventListener('resize', read);
+  }, []);
+
+  // write a custom property only when its value really changed (each write restyles the card)
+  const setVar = (i, card, name, v) => {
+    const s = v.toFixed(3);
+    if (geo.current.last[i][name] === s) return;
+    geo.current.last[i][name] = s;
+    card.style.setProperty(name, s);
+  };
+
   useScrollProgress(
     stackRef,
-    () => {
+    (p, tops) => {
+      if (!tops) return;
       const vh = window.innerHeight;
-      const cards = stackRef.current.querySelectorAll('.product-card');
+      const { cards, stick } = geo.current;
       cards.forEach((card, i) => {
-        const top = card.getBoundingClientRect().top;
-        card.style.setProperty('--enter', ease.outCubic(ease.clamp((vh - top) / (vh * 0.55))).toFixed(4));
-        const next = cards[i + 1];
-        if (next) {
-          const stick = parseFloat(getComputedStyle(next).top) || 0;
-          const away = ease.clamp((vh - next.getBoundingClientRect().top) / (vh - stick));
-          card.style.setProperty('--away', away.toFixed(4));
+        setVar(i, card, '--enter', ease.outCubic(ease.clamp((vh - tops[i]) / (vh * 0.55))));
+        if (i < cards.length - 1) {
+          setVar(i, card, '--away', ease.clamp((vh - tops[i + 1]) / (vh - stick[i + 1])));
         }
       });
     },
-    { mode: 'view', ease: 0.5 }
+    // read phase only: card positions
+    { mode: 'view', ease: 0.5, measure: () => geo.current.cards.map((c) => c.getBoundingClientRect().top) }
   );
 
   return (
     <section id="productos" data-nav-theme="dark" className="products" aria-labelledby="products-title">
       <div className="dotted-bg" />
+      <span className="section-rule" data-reveal aria-hidden="true" />
       <div className="wrap products-wrap">
         <div className="products-head">
           <Kicker>Productos propios</Kicker>

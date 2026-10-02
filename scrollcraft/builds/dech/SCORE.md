@@ -59,3 +59,22 @@ Longitud aproximada: ~17 pantallas en escritorio, 9 actos (fuera de la banda 6-7
 - Onda expansiva en el instante en que el sistema se conecta (refuerza el pico).
 - Industrias como carrusel 3D, ventanas de producto que se inclinan hacia el puntero, cursor con botones magnéticos.
 - Cierre: la firma "Dech Solutions" gigante sube letra por letra al final.
+
+## Ronda 3 (feedback: "el hero genera lag", "navbar interactivo", "más animaciones sin afectar el rendimiento")
+
+Medido con build de producción en Chrome, 1440x900, CPU normal y CPU x4 (equipo lento).
+Causas encontradas con trazas de Chrome, y su corrección:
+- Chevrones de vidrio con `backdrop-filter` sobre un canvas animado: se redifuminaban cada cuadro. Ahora el shader los dibuja como lentes en la misma pasada.
+- Shader: ruido evaluado una vez por píxel (antes 5), resolución 0.5 (antes 0.62) con bajada automática si el equipo va lento, sin capa de grano con mix-blend.
+- Motor de scroll: lee todo el layout primero y escribe después (antes intercalaba), y se duerme si no hay scroll.
+- Problema, Industrias, Productos y cintas: geometría en caché, cero lecturas de layout por cuadro; partículas dibujadas por lotes de color.
+- Animaciones CSS infinitas fuera de pantalla pausadas (eran ~1000 recálculos de estilo por segundo).
+- Barrido de Casos con transformaciones en vez de `clip-path`; fondo de puntos con transform en vez de background-position.
+- El estado del navbar vive en el navbar: sus cambios ya no re-renderizan la página.
+
+Navbar: indicador que se desliza al enlace en hover y sigue la sección activa, enlaces con texto que rueda,
+barra de progreso de lectura, se oculta al bajar y vuelve al subir, chevrones del logo que corren en hover,
+entrada escalonada, botón de menú que se transforma en X, hoja móvil con enlaces en cascada.
+Animaciones nuevas (solo opacity/translate, una vez, por IntersectionObserver): entradas escalonadas en
+productos, metodología, diagnóstico, casos, contacto y footer; brillo en los botones principales;
+subrayados que se dibujan; íconos que se inclinan; líneas de luz al inicio de las secciones oscuras.

@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { LogoMark } from './Logo';
 import { useVisibleFrame } from './scroll/engine';
 
@@ -40,7 +40,19 @@ export default function MarqueeBand() {
   const sectionRef = useRef(null);
   const aRef = useRef(null);
   const bRef = useRef(null);
-  const st = useRef({ lastY: null, v: 0, t0: null });
+  const st = useRef({ lastY: null, v: 0, t0: null, half: [0, 0] });
+
+  // loop widths only change with the layout: measure them here, never in the frame loop
+  useEffect(() => {
+    const measure = () => {
+      st.current.half = [aRef.current.scrollWidth / 2, bRef.current.scrollWidth / 2];
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(aRef.current);
+    ro.observe(bRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   useVisibleFrame(sectionRef, (now) => {
     const s = st.current;
@@ -52,15 +64,14 @@ export default function MarqueeBand() {
     s.v += (dy - s.v) * 0.12;
     const t = (now - s.t0) / 1000;
     const skew = Math.max(-14, Math.min(14, -s.v * 0.35));
-    const move = (track, dir) => {
-      const half = track.scrollWidth / 2;
+    const move = (track, dir, half) => {
       if (!half) return;
       let x = (t * 46 + y * 0.55) % half;
       if (dir < 0) x = half - x;
       track.style.transform = `translate3d(${-x}px, 0, 0) skewX(${skew.toFixed(2)}deg)`;
     };
-    move(aRef.current, 1);
-    move(bRef.current, -1);
+    move(aRef.current, 1, s.half[0]);
+    move(bRef.current, -1, s.half[1]);
   });
 
   return (

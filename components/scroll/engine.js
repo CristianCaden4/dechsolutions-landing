@@ -12,9 +12,14 @@ import { useEffect, useRef } from 'react';
  *                  (0 when its top enters at the bottom, 1 when its bottom leaves at the top).
  *  - mode "enter": 0 when its top is at the viewport bottom, 1 once its top reaches 25% of the viewport.
  *
+ * Performance contract:
+ *  - every frame first READS (all rects, plus each subscriber's optional `measure()`), then WRITES
+ *    (callbacks), so layout is computed at most once per frame instead of once per subscriber;
+ *  - rects are only re-read when the page scrolled or resized;
+ *  - the loop sleeps as soon as nothing is moving and wakes on scroll/resize.
  * Callbacks mutate the DOM directly through refs, so scrolling never re-renders React.
- * With prefers-reduced-motion the loop never starts: each callback is called once
- * with its `reducedValue` (the final, readable state).
+ * With prefers-reduced-motion the loop never starts: each callback is called once with its
+ * `reducedValue` (the final, readable state).
  */
 
 const subs = new Set();
@@ -22,11 +27,14 @@ let raf = 0;
 let vh = 0;
 let reduced = false;
 let started = false;
+let running = false;
+let dirty = true;
+let lastY = -1;
+let idle = 0;
 
 const clamp = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-function measure(el, mode) {
-  const r = el.getBoundingClientRect();
+function progressOf(r, mode) {
   if (mode === 'pin') {
     const span = r.height - vh;
     return span > 0 ? clamp(-r.top / span) : r.top <= 0 ? 1 : 0;
@@ -36,24 +44,59 @@ function measure(el, mode) {
 }
 
 function tick() {
-  vh = window.innerHeight;
+  const y = window.scrollY;
+  const moved = dirty || y !== lastY;
+  lastY = y;
+
+  // read phase
+  if (moved) {
+    vh = window.innerHeight;
+    subs.forEach((s) => {
+      s.target = progressOf(s.el.getBoundingClientRect(), s.mode);
+      if (s.measure) s.data = s.measure();
+    });
+    dirty = false;
+  }
+
+  // write phase
+  let animating = false;
   subs.forEach((s) => {
-    const target = measure(s.el, s.mode);
-    if (s.cur == null) s.cur = target;
-    else {
-      s.cur += (target - s.cur) * s.ease;
-      if (Math.abs(target - s.cur) < 0.0004) s.cur = target;
+    if (s.cur == null) s.cur = s.target;
+    else if (s.cur !== s.target) {
+      s.cur += (s.target - s.cur) * s.ease;
+      if (Math.abs(s.target - s.cur) < 0.0004) s.cur = s.target;
     }
-    if (s.cur !== s.last) {
+    if (s.cur !== s.target) animating = true;
+    if (s.cur !== s.last || (moved && s.measure)) {
       s.last = s.cur;
-      s.cb(s.cur);
+      s.cb(s.cur, s.data);
     }
   });
+
+  idle = moved || animating ? 0 : idle + 1;
+  if (idle > 3) {
+    running = false;
+    return;
+  }
+  raf = requestAnimationFrame(tick);
+}
+
+function wake() {
+  if (running || reduced) return;
+  running = true;
+  idle = 0;
   raf = requestAnimationFrame(tick);
 }
 
 function settleReduced() {
-  subs.forEach((s) => s.cb(s.reducedValue));
+  subs.forEach((s) => s.cb(s.reducedValue, s.measure ? s.measure() : undefined));
+}
+
+function invalidate() {
+  dirty = true;
+  subs.forEach((s) => (s.last = null));
+  if (reduced) settleReduced();
+  else wake();
 }
 
 function start() {
@@ -64,22 +107,23 @@ function start() {
   mq.addEventListener('change', (e) => {
     reduced = e.matches;
     cancelAnimationFrame(raf);
+    running = false;
     if (reduced) settleReduced();
-    else raf = requestAnimationFrame(tick);
+    else invalidate();
   });
-  window.addEventListener('resize', () => {
-    // force every subscriber to re-emit after layout changes
-    subs.forEach((s) => (s.last = null));
-    if (reduced) settleReduced();
-  });
-  if (!reduced) raf = requestAnimationFrame(tick);
+  window.addEventListener('scroll', wake, { passive: true });
+  window.addEventListener('resize', invalidate);
+  // layout can change without a scroll (fonts loading, sections sizing themselves)
+  new ResizeObserver(invalidate).observe(document.body);
+  wake();
 }
 
 export function subscribe(sub) {
-  const s = { ease: 0.12, mode: 'view', reducedValue: 1, cur: null, last: null, ...sub };
+  const s = { ease: 0.12, mode: 'view', reducedValue: 1, cur: null, last: null, target: 0, ...sub };
   subs.add(s);
   start();
-  if (reduced) s.cb(s.reducedValue);
+  if (reduced) s.cb(s.reducedValue, s.measure ? s.measure() : undefined);
+  else invalidate();
   return () => subs.delete(s);
 }
 
@@ -87,12 +131,19 @@ export function prefersReducedMotion() {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-/** React binding: calls `cb(progress)` every time the smoothed progress of `ref` changes. */
-export function useScrollProgress(ref, cb, { mode = 'view', ease, reducedValue = 1 } = {}) {
+/**
+ * React binding: calls `cb(progress, data)` every time the smoothed progress of `ref` changes.
+ * `measure` (optional) runs in the read phase, after a scroll, and its result is passed as `data`:
+ * put any layout reads there, never in `cb`.
+ */
+export function useScrollProgress(ref, cb, { mode = 'view', ease, reducedValue = 1, measure } = {}) {
   const cbRef = useRef(cb);
+  const measureRef = useRef(measure);
   useEffect(() => {
     cbRef.current = cb;
+    measureRef.current = measure;
   });
+  const hasMeasure = !!measure;
   useEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
@@ -102,9 +153,10 @@ export function useScrollProgress(ref, cb, { mode = 'view', ease, reducedValue =
       mode,
       reducedValue,
       ease: ease ?? (touch ? 0.2 : 0.12),
-      cb: (p) => cbRef.current(p),
+      measure: hasMeasure ? () => measureRef.current() : undefined,
+      cb: (p, data) => cbRef.current(p, data),
     });
-  }, [ref, mode, ease, reducedValue]);
+  }, [ref, mode, ease, reducedValue, hasMeasure]);
 }
 
 /** Run `cb(time)` on every animation frame while `ref` is on screen. */
@@ -140,6 +192,25 @@ export function useVisibleFrame(ref, cb, { rootMargin = '100px' } = {}) {
       cancelAnimationFrame(id);
     };
   }, [ref, rootMargin]);
+}
+
+/** Add `is-in` to `ref` the first time it enters the viewport (CSS does the animation). */
+export function useInView(ref, { threshold = 0.25, rootMargin = '0px' } = {}) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) {
+          el.classList.add('is-in');
+          io.disconnect();
+        }
+      },
+      { threshold, rootMargin }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, threshold, rootMargin]);
 }
 
 export const ease = {

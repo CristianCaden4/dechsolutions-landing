@@ -1,6 +1,5 @@
 'use client';
 
-import { useScrollEffects } from './useScrollEffects';
 import Nav from './Nav';
 import Hero from './Hero';
 import ProblemSection from './ProblemSection';
@@ -17,13 +16,11 @@ import Intro from './fx/Intro';
 import Cursor from './fx/Cursor';
 
 export default function SiteClient() {
-  const { navScrolled, navTheme } = useScrollEffects();
-
   return (
     <>
       <Intro />
       <Cursor />
-      <Nav navScrolled={navScrolled} navTheme={navTheme} />
+      <Nav />
       <Hero />
       <ProblemSection />
       <SolutionsSection />

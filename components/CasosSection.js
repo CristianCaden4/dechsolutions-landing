@@ -89,7 +89,9 @@ function CaseVisual({ c, flip }) {
         </div>
         <span className="case-chip before">{c.before}</span>
       </div>
+      {/* the wipe is two layers sliding against each other: pure transforms, no repaint */}
       <div className="case-after">
+        <div className="case-after__inner">
         <div className="after-board">
           <div className="after-icon">{c.icon}</div>
           {[0, 1, 2].map((k) => (
@@ -101,6 +103,7 @@ function CaseVisual({ c, flip }) {
           ))}
         </div>
         <span className="case-chip after">{c.after}</span>
+        </div>
       </div>
       <span className="case-scanline" />
     </div>
@@ -110,6 +113,7 @@ function CaseVisual({ c, flip }) {
 export default function CasosSection() {
   return (
     <section data-nav-theme="dark" className="casos" aria-labelledby="casos-title">
+      <span className="section-rule" data-reveal aria-hidden="true" />
       <div className="wrap">
         <div className="badge-row dark">
           <span className="badge-num">
@@ -125,7 +129,7 @@ export default function CasosSection() {
           {CASES.map((c, i) => (
             <article key={c.tag} className={`case-row ${i % 2 ? 'flip' : ''}`}>
               <CaseVisual c={c} flip={i % 2 === 1} />
-              <div className="case-body" data-reveal>
+              <div className="case-body" data-stagger>
                 <p className="case-tag-label">{c.tag}</p>
                 <h3>{c.title}</h3>
                 <dl className="case-details-grid">

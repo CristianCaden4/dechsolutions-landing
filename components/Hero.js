@@ -5,7 +5,7 @@ import HeroShader from './HeroShader';
 import RollButton from './RollButton';
 import { LogoMark } from './Logo';
 import { scrambleInto } from './fx/Scramble';
-import { useScrollProgress, useVisibleFrame, prefersReducedMotion, ease } from './scroll/engine';
+import { useScrollProgress, prefersReducedMotion, ease } from './scroll/engine';
 
 // Floating glass status chips (foreground plane). Illustrative only: no figures.
 // `dir` is the direction each one is flung when the camera dives through the logo.
@@ -16,12 +16,6 @@ const CHIPS = [
   { text: 'clientes centralizados', cls: 'c4', depth: 1.1, dir: [0.1, -1] },
 ];
 
-// The logo's three chevrons, rebuilt as frosted-glass planes that refract the shader behind them.
-const CHEVRONS = [
-  { cls: 'g1', depth: 0.5 },
-  { cls: 'g2', depth: 0.9 },
-  { cls: 'g3', depth: 1.35 },
-];
 
 const SERVICES = ['Software', 'Automatización', 'Sistemas Empresariales'];
 const LINE1 = ['Tecnología', 'construida'];
@@ -68,41 +62,37 @@ export default function Hero() {
   const line1Ref = useRef(null);
   const line2Ref = useRef(null);
   const ctasRef = useRef(null);
-  const chevWrapRef = useRef(null);
-  const chevRefs = useRef([]);
   const chipRefs = useRef([]);
+  const chipDepthRefs = useRef([]);
   const progressRef = useRef(0);
-  const pointer = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
+  // shared with the shader: it draws the glass logo and hands back the smoothed pointer each frame
+  const sceneRef = useRef({ p: 0, mx: 0, my: 0, revealAt: 0, lastMx: 9, lastMy: 9, onFrame: null });
   const [started, setStarted] = useState(false);
 
   // entrance waits for the intro to open the curtain
   useEffect(() => {
     const go = () => {
       sectionRef.current?.classList.add('is-ready');
+      sceneRef.current.revealAt = performance.now();
       setStarted(true);
     };
     if (window.__dechRevealed) requestAnimationFrame(go);
     else window.addEventListener('dech:reveal', go, { once: true });
-    const onMove = (e) => {
-      pointer.current.tx = (e.clientX / window.innerWidth) * 2 - 1;
-      pointer.current.ty = (e.clientY / window.innerHeight) * 2 - 1;
-    };
-    window.addEventListener('pointermove', onMove, { passive: true });
-    return () => {
-      window.removeEventListener('dech:reveal', go);
-      window.removeEventListener('pointermove', onMove);
-    };
-  }, []);
 
-  // pointer parallax: closer planes move more
-  useVisibleFrame(sectionRef, () => {
-    const p = pointer.current;
-    p.x += (p.tx - p.x) * 0.06;
-    p.y += (p.ty - p.y) * 0.06;
-    const el = sectionRef.current;
-    el.style.setProperty('--mx', p.x.toFixed(4));
-    el.style.setProperty('--my', p.y.toFixed(4));
-  });
+    // pointer parallax for the chips, driven from the shader's own frame (one loop for the whole hero);
+    // writes only when the pointer actually moved
+    sceneRef.current.onFrame = (scene) => {
+      if (Math.abs(scene.mx - scene.lastMx) < 0.001 && Math.abs(scene.my - scene.lastMy) < 0.001) return;
+      scene.lastMx = scene.mx;
+      scene.lastMy = scene.my;
+      chipDepthRefs.current.forEach((el, i) => {
+        if (!el) return;
+        const d = CHIPS[i].depth * 1.6;
+        el.style.transform = `translate3d(${(-scene.mx * d * 16).toFixed(2)}px, ${(-scene.my * d * 11).toFixed(2)}px, 0)`;
+      });
+    };
+    return () => window.removeEventListener('dech:reveal', go);
+  }, []);
 
   // scroll exit: the camera dives through the glass logo while the headline splits apart
   useScrollProgress(
@@ -110,14 +100,7 @@ export default function Hero() {
     (p) => {
       progressRef.current = p;
       const e = ease.outCubic(p);
-      const dive = p * p * p;
       const vw = window.innerWidth;
-      chevWrapRef.current.style.transform = `scale(${1 + dive * 11})`;
-      chevWrapRef.current.style.opacity = 1 - ease.range(p, 0.8, 1);
-      chevRefs.current.forEach((el, i) => {
-        if (!el) return;
-        el.style.transform = `translate3d(${(i - 1) * e * 70}px, 0, 0) rotate(${(i - 1) * e * 5}deg)`;
-      });
       chipRefs.current.forEach((el, i) => {
         if (!el) return;
         const { dir, depth } = CHIPS[i];
@@ -156,31 +139,17 @@ export default function Hero() {
     ));
 
   return (
-    <section ref={sectionRef} data-nav-theme="dark" className="hero" aria-labelledby="hero-title">
+    <section ref={sectionRef} data-nav-theme="dark" data-spy="inicio" className="hero" aria-labelledby="hero-title">
       <div className="hero-sticky">
         <div className="hero-frame">
-          <HeroShader progressRef={progressRef} />
-          <div className="grain" aria-hidden="true" />
-
-          <div ref={chevWrapRef} className="hero-chevrons" aria-hidden="true">
-            {CHEVRONS.map((c, i) => (
-              <div key={c.cls} ref={(el) => (chevRefs.current[i] = el)} className={`hero-chev-plane ${c.cls}`}>
-                <div className="depth" style={{ '--d': c.depth }}>
-                  <div className="glass-chev">
-                    <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-                      <polygon points="0,0 38,0 100,50 38,100 0,100 62,50" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          {/* the glass logo is drawn inside the shader, in the same pass as the background */}
+          <HeroShader progressRef={progressRef} sceneRef={sceneRef} />
 
           <div className="hero-chips" aria-hidden="true">
             {CHIPS.map((c, i) => (
               <div key={c.cls} ref={(el) => (chipRefs.current[i] = el)} className={`hero-chip-plane ${c.cls}`}>
-                <div className="depth" style={{ '--d': c.depth * 1.6 }}>
-                  <span className="hero-chip liquid-glass">
+                <div ref={(el) => (chipDepthRefs.current[i] = el)} className="depth">
+                  <span className="hero-chip">
                     <span className="status-dot" />
                     {c.text}
                   </span>
