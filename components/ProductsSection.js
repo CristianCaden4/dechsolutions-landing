@@ -26,7 +26,7 @@ function WindowChrome({ title }) {
   );
 }
 
-function PymeMock() {
+export function PymeMock() {
   const ref = useRef(null);
   // cycle the active module so the window feels alive
   useEffect(() => {
@@ -76,7 +76,7 @@ function PymeMock() {
   );
 }
 
-function LexMock() {
+export function LexMock() {
   return (
     <div className="mock mock-lex">
       <WindowChrome title="lexcore / casos" />
